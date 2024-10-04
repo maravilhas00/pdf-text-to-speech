@@ -1,6 +1,5 @@
 import sys
 import pyttsx3
-import PyPDF2
 import threading
 import fitz  # PyMuPDF
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QLabel, QComboBox, QSlider, QFileDialog, QTextEdit, QHBoxLayout, QGraphicsView, QGraphicsScene, QLineEdit
@@ -16,12 +15,13 @@ class TTSApp(QWidget):
         self.pdf_document = None  # Track the opened PDF document
         self.current_page = 0  # Track the current page being viewed
         self.total_pages = 0  # Track the total number of pages in the PDF
+        self.stop_flag = False  # Flag to stop speech
 
         self.initUI()
 
     def initUI(self):
         # Window properties
-        self.setWindowTitle("Book reader with PDF Viewer")
+        self.setWindowTitle("Book Reader with PDF Viewer")
         self.setGeometry(420, 200, 1000, 700)  # Increase window size for PDF viewer
 
         # Main Layout (horizontal to have controls on the left and PDF on the right)
@@ -130,10 +130,22 @@ class TTSApp(QWidget):
             self.voice_combo.addItem(voice.name, voice.id)
 
     def start_speaking_thread(self):
+        # Reset the stop flag
+        self.stop_flag = False
+
+        # Start speaking in a separate thread
         self.speaking_thread = threading.Thread(target=self.speak)
         self.speaking_thread.start()
 
     def speak(self):
+        # Reinitialize the engine to reset it before starting speech
+        global engine
+        engine = pyttsx3.init()
+        
+        # Disable the speak button while speaking
+        self.speak_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+        
         # Get the selected voice
         selected_voice = self.voice_combo.currentData()
         engine.setProperty('voice', selected_voice)
@@ -146,31 +158,36 @@ class TTSApp(QWidget):
         volume = self.volume_slider.value() / 100  # Normalize to 0-1
         engine.setProperty('volume', volume)
 
+        # Get the text from the current page (from the text box)
+        current_page_text = self.text_box.toPlainText()
+
         # Chunk the text into smaller parts
-        chunk_size = 500  # Number of characters per chunk
-        for i in range(0, len(self.text), chunk_size):
-            # Speak each chunk separately to avoid the engine stopping midway
-            chunk = self.text[i:i + chunk_size]
+        chunk_size = 50  # Number of characters per chunk
+        for i in range(0, len(current_page_text), chunk_size):
+            if self.stop_flag:  # Check if stop has been requested
+                break  # Exit the loop if stop is triggered
+            # Speak each chunk separately
+            chunk = current_page_text[i:i + chunk_size]
             engine.say(chunk)
             engine.runAndWait()
+
+        # Enable the speak button again
+        self.speak_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+
+    def stop_speaking(self):
+        # Set the stop flag to True to halt ongoing speech
+        self.stop_flag = True
+
+        # Also stop the engine directly
+        engine.stop()
 
     def open_file_dialog(self):
         options = QFileDialog.Options()
         file_path, _ = QFileDialog.getOpenFileName(self, "Open PDF File", "", "PDF Files (*.pdf)", options=options)
 
         if file_path:
-            pdf_text = self.read_pdf(file_path)
-            self.text_box.setText(pdf_text)
             self.load_pdf(file_path)  # Load and display the PDF
-
-    def read_pdf(self, file_path):
-        with open(file_path, 'rb') as file:
-            reader = PyPDF2.PdfReader(file)
-            self.text = ""
-            for page_num in range(len(reader.pages)):
-                page = reader.pages[page_num]
-                self.text += page.extract_text()
-        return self.text
 
     def load_pdf(self, file_path):
         # Open the PDF using PyMuPDF (fitz)
@@ -208,6 +225,14 @@ class TTSApp(QWidget):
         # Update the page label after displaying the page
         self.update_page_label()
 
+        # Extract and display the text for the current page
+        self.extract_text_for_page(page_number)
+
+    def extract_text_for_page(self, page_number):
+        page = self.pdf_document.load_page(page_number)
+        page_text = page.get_text("text")
+        self.text_box.setText(page_text)
+
     def show_next_page(self):
         if self.current_page < self.total_pages - 1:
             self.current_page += 1
@@ -221,7 +246,6 @@ class TTSApp(QWidget):
             self.update_navigation_buttons()
 
     def go_to_page(self):
-        # Get the page number from the input field and validate it
         try:
             page_number = int(self.page_input.text()) - 1  # Convert to zero-based index
             if 0 <= page_number < self.total_pages:
@@ -241,15 +265,12 @@ class TTSApp(QWidget):
         self.next_page_button.setEnabled(self.current_page < self.total_pages - 1)
 
     def update_page_label(self):
-        # Update the label to show the current page number
+        # Update the label with current page information
         self.page_label.setText(f"Page {self.current_page + 1} of {self.total_pages}")
-
-    def stop_speaking(self):
-        engine.stop()
 
 # Main loop
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    tts = TTSApp()
-    tts.show()
+    tts_app = TTSApp()
+    tts_app.show()
     sys.exit(app.exec_())
