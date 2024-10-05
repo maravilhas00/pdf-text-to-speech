@@ -1,6 +1,6 @@
 # Ignore PyInstaller build directories
 build/
-dist/
+#dist/
 
 # Ignore Python compiled files
 *.pyc
