@@ -6,5 +6,4 @@ Functionalities:
 -> Converts all of the pdf text to simple text;
 -> Works as a PDF viewer, can navigate through all of the pages.
 
-Only known bug:
--> If it starts reading a second time after the first, the engine bugs and only reads the first chunk of text.
+
