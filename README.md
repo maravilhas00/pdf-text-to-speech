@@ -1,5 +1,6 @@
 # PDF to text to speech app
-A Python program to convert a pdf file to text-to-speech
+
+A Python program to convert a pdf file to text-to-speech.
 
 Functionalities:
 
