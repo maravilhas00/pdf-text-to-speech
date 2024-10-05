@@ -1,12 +1,28 @@
 import sys
 import pyttsx3
 import threading
-import fitz  # PyMuPDF
+import fitz         # PyMuPDF
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QLabel, QComboBox, QSlider, QFileDialog, QTextEdit, QHBoxLayout, QGraphicsView, QGraphicsScene, QLineEdit
 from PyQt5.QtGui import QPixmap, QImage
 
-# Initialize the TTS engine
+# Initialize the TTS engine for only the voice drop-box
 engine = pyttsx3.init()
+
+# Start engine as a class, so I can delete the object later, because the runandwait function gets blocked
+class _TTS:
+    engine = None
+    rate = None
+    def __init__(self):
+        self.engine = pyttsx3.init()
+    
+    def start(self,text_):
+        self.engine.say(text_)
+        self.engine.runAndWait()
+
+    def settings(self, rate, volume, selected_voice):
+        self.engine.setProperty('volume', volume)
+        self.engine.setProperty('voice', selected_voice)
+        self.engine.setProperty('rate', rate)
 
 class TTSApp(QWidget):
     def __init__(self):
@@ -127,7 +143,7 @@ class TTSApp(QWidget):
     def populate_voices(self):
         voices = engine.getProperty('voices')
         for voice in voices:
-            self.voice_combo.addItem(voice.name, voice.id)
+           self.voice_combo.addItem(voice.name, voice.id)
 
     def start_speaking_thread(self):
         # Reset the stop flag
@@ -138,9 +154,8 @@ class TTSApp(QWidget):
         self.speaking_thread.start()
 
     def speak(self):
-        # Reinitialize the engine to reset it before starting speech
-        global engine
-        engine = pyttsx3.init()
+        # Initialize the engine
+        tts = _TTS()
         
         # Disable the speak button while speaking
         self.speak_button.setEnabled(False)
@@ -148,15 +163,14 @@ class TTSApp(QWidget):
         
         # Get the selected voice
         selected_voice = self.voice_combo.currentData()
-        engine.setProperty('voice', selected_voice)
 
         # Set the rate from the slider
         rate = self.rate_slider.value()
-        engine.setProperty('rate', rate)
 
         # Set the volume from the slider
         volume = self.volume_slider.value() / 100  # Normalize to 0-1
-        engine.setProperty('volume', volume)
+
+        tts.settings(rate, volume, selected_voice)
 
         # Get the text from the current page (from the text box)
         current_page_text = self.text_box.toPlainText()
@@ -165,11 +179,11 @@ class TTSApp(QWidget):
         chunk_size = 50  # Number of characters per chunk
         for i in range(0, len(current_page_text), chunk_size):
             if self.stop_flag:  # Check if stop has been requested
+                del(tts)
                 break  # Exit the loop if stop is triggered
             # Speak each chunk separately
             chunk = current_page_text[i:i + chunk_size]
-            engine.say(chunk)
-            engine.runAndWait()
+            tts.start(chunk)
 
         # Enable the speak button again
         self.speak_button.setEnabled(True)
@@ -178,9 +192,6 @@ class TTSApp(QWidget):
     def stop_speaking(self):
         # Set the stop flag to True to halt ongoing speech
         self.stop_flag = True
-
-        # Also stop the engine directly
-        engine.stop()
 
     def open_file_dialog(self):
         options = QFileDialog.Options()
